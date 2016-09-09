@@ -1,0 +1,64 @@
+{
+    "version": "0.1.0",
+    "command": "sh",
+    "args": [
+        "-c"
+    ],
+    "isShellCommand": true,
+    "showOutput": "always",
+    "suppressTaskName": true,
+    "tasks": [
+        {
+            "taskName": "chuck start.ck",
+            "isBuildCommand": true,
+            "args": [
+                "chuck start.ck"
+            ],
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^\\[(.*)\\]:line\\((\\d+)\\)(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "message": 3
+                }
+            }
+        },
+        {
+            "taskName": "chuck add",
+            "args": [
+                "chuck + ${file}"
+            ],
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^\\[(.*)\\]:line\\((\\d+)\\)(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "message": 3
+                }
+            }
+        },
+        {
+            "taskName": "chuck remove all",
+            "args": [
+                "chuck --remove.all"
+            ]
+        },
+        {
+            "isTestCommand": true,
+            "taskName": "kill chuck",
+            "args": [
+                "chuck --kill"
+            ]
+        }
+    ]
+}
