@@ -6,7 +6,8 @@ class MidiEvent extends Event {
 
 public class MidiFacade {
     MidiIn min[16];
-    int devices;
+    MidiOut mout[16];
+    0 => int moutCount;
     MidiEvent event;
 
     fun void go( MidiIn min, int id )
@@ -17,9 +18,14 @@ public class MidiFacade {
             min => now;
             while( min.recv( msg ) )
             {
+                if (msg.data1 == 248 || (msg.data1 == 153 && msg.data3 == 0)) {
+                    continue;
+                }
                 <<< "device", id, ":", msg.data1, msg.data2, msg.data3 >>>;
                 min @=> event.midiIn;
-                msg @=> event.msg;
+                msg.data1 => event.msg.data1;
+                msg.data2 => event.msg.data2;
+                msg.data3 => event.msg.data3;
                 event.broadcast();
             }
         }
@@ -34,13 +40,28 @@ public class MidiFacade {
         // open the device
         if( min[i].open( i ) )
         {
-            <<< "device", i, "->", min[i].name(), "->", "open: SUCCESS" >>>;
+            <<< "midi in", i, "->", min[i].name(), "->", "open: SUCCESS" >>>;
             spork ~ go( min[i], i );
-            devices++;
+        } else {
+            break;
         }
-        else break;
+    }
+
+
+    for( int i; i < mout.cap(); i++ )
+    {
+        MidiOut midiOut;
+        // no print err
+        midiOut.printerr( 0 );
+
+        // open the device
+        if( midiOut.open( i ) )
+        {
+            <<< "midi out", i, "->", midiOut.name(), "->", "open: SUCCESS" >>>;
+            midiOut @=> mout[moutCount++];
+        } else {
+            break;
+        }
     }
 }
-
-
 

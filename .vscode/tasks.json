@@ -10,7 +10,6 @@
     "tasks": [
         {
             "taskName": "chuck start.ck",
-            "isBuildCommand": true,
             "args": [
                 "chuck start.ck"
             ],
@@ -30,6 +29,7 @@
         },
         {
             "taskName": "chuck add",
+            "isBuildCommand": true,
             "args": [
                 "chuck + ${file}"
             ],
@@ -49,12 +49,12 @@
         },
         {
             "taskName": "chuck remove all",
+            "isTestCommand": true,
             "args": [
                 "chuck --remove.all"
             ]
         },
         {
-            "isTestCommand": true,
             "taskName": "kill chuck",
             "args": [
                 "chuck --kill"
