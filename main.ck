@@ -37,7 +37,6 @@ class SweepDown extends Effect {
     fun static SweepDown create(int controlIndex,float minValue) {
         SweepDown eff;
         minValue => eff.minValue;
-        <<< "Control!", controlIndex >>>;
         controlIndex => eff.controlIndex;
         Std.itoa(controlIndex) => eff.monoGroup;
         return eff;
@@ -132,7 +131,6 @@ class Polly extends Patch {
     "Polly" => name;
     midiDevices.SAMPLE_PAD => inputMidiName;
     10 => instrumentNumber;
-    <<< "CUT!!!", MicroKorg.CUTOFF >>>;
     SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["51"];
     SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["45"];
 
@@ -155,11 +153,11 @@ class Amazon extends Patch {
 
     repeated([45, 47, 53, 57, 60, 67, 60, 57, 53, 47], 50) @=> int AMAZON_SEQ_RAND[];
 
-    (60.0 / 140.0 * 1000.0 / 2.0)::ms => dur timePerNote;
+    (60.0 / 150.0 * 1000.0 / 2.0)::ms => dur timePerNote;
 
     NoteSequencer.create(AMAZON_SEQ, timePerNote) @=> effectByNote["45"];
     NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
-    NoteSequencer.create(AMAZON_SEQ_RAND, timePerNote) @=> effectByNote["51"];
+    NoteSequencer.create(AMAZON_SEQ_RAND, timePerNote) @=> effectByNote["36"];
 }
 
 
@@ -172,9 +170,15 @@ fun MidiOut findMidiOut(string namePart) {
 }
 
 
-Polly polly @=> Patch patch;
+Polly  polly;
+Amazon amazon;
+[polly, amazon] @=> Patch patches[];
+polly @=> Patch patch;
+
 Shred effectShredByMonoGroup[1];
 findMidiOut(OUTPUT_MIDI_NAME) @=> MidiOut midiOut;
+
+<<< "main started">>>;
 
 while (true) {
     midi.event => now;
@@ -183,7 +187,18 @@ while (true) {
     msg.data2 => int data2;
     msg.data3 => int data3;
     <<< "hui", midi.event.midiIn.name().find(SAMPLE_PAD), data1, data2, data3 >>>;
-    if ((midi.event.midiIn.name().find(SAMPLE_PAD) > -1) && (data1 == 144 || data1 == 153)) {
+
+    if (midi.event.midiIn.name().find(OUTPUT_MIDI_NAME) >-1 && data1 == 192) {
+        <<< "Changed instrument: ", data2>>>;
+        for(int patchId; patchId < patches.size(); patchId++) {
+            if (patches[patchId].instrumentNumber == data2) {
+                patches[patchId] @=> patch;
+                <<< "Changed patch: ", patch.name>>>;
+            }
+        }
+    }
+
+    if ((midi.event.midiIn.name().find(patch.inputMidiName) > -1) && (data1 == 144 || data1 == 153)) {
         Std.ftoa(data2, 0) => string note;
         patch.effectByNote[note] @=> Effect effect;
         <<< "MidiEvent!", midi.event.midiIn.name(), note, effect, data3 >>>;
