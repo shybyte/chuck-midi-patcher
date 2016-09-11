@@ -34,4 +34,43 @@ Effect effectByNote[1];
 Effect e1 @=> effectByNote["60"];
 Effect2 e2 @=> effectByNote["62"];
 
-effectByNote["62"].trigger();
+// effectByNote["62"].trigger();
+
+ 
+
+fun int[] repeated(int in[], int repetions) {
+    in.size()*repetions => int outSize;
+    int out[ outSize];
+    for(int i; i< outSize; i++) {
+        in[i%in.size()] => out[i];
+    }
+    return out;
+}
+
+fun int[] concat(int in[][]) {
+    int out[0];
+    int iOut;
+    for(int j; j< in.size(); j++) {
+        out.size(out.size()+in[j].size());
+        for(int i; i<in[j].size(); i++) {
+            in[j][i] => out[iOut++];
+        }
+    }
+    return out;
+}
+
+
+fun void print(int in[]) {
+    in.size() => int size;
+    <<< "[" >>>;
+    for(int i; i<size; i++) {
+        <<< in[i] >>>;
+    }
+    <<< "]" >>>;
+}
+
+
+<<< "Repeated:", repeated([1,2], 3)>>>;
+
+// print(repeated([1,2,3], 3)
+print(concat([[1,2],[3]]));
