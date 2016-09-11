@@ -1,6 +1,4 @@
-2::second => now;
-
-MidiFacade midi;
+InitMidiFacade.instance @=> MidiFacade midi;
 MidiDevices midiDevices;
 
 midiDevices.USB_MIDI_ADAPTER => string OUTPUT_MIDI_NAME;
@@ -28,16 +26,18 @@ class SweepDown extends Effect {
         velocity => float value;
         while (value >= this.minValue) {
             sendMidi(midiOut, 0xB0, controlIndex, value);
-            <<< "Value: ", value >>>;
-            value - 2 => value;
+            <<< "SweepValue: ",controlIndex, value >>>;
+            value - 1.0 - (velocity/50.0) => value;
             20::ms => now;
             me.yield(); // Allow parent to exit my shred.
         }
+        sendMidi(midiOut, 0xB0, controlIndex, minValue);
     }
 
     fun static SweepDown create(int controlIndex,float minValue) {
         SweepDown eff;
         minValue => eff.minValue;
+        <<< "Control!", controlIndex >>>;
         controlIndex => eff.controlIndex;
         Std.itoa(controlIndex) => eff.monoGroup;
         return eff;
@@ -46,6 +46,7 @@ class SweepDown extends Effect {
 
 class ControlSequencer extends Effect {
     int sequence[];
+    int lastValue;
     dur timePerNote;
     int controlIndex;
     "note" => monoGroup;
@@ -53,18 +54,21 @@ class ControlSequencer extends Effect {
     fun void trigger(MidiOut midiOut, float velocity) {
         for(int i;i<sequence.cap();i++) {
             sequence[i] => int value;
-            <<< "Value: ", value >>>;
+            <<< "ControlSequencerValue: ", value >>>;
             sendMidi(midiOut, 0xB0, controlIndex, value); // note on
             timePerNote => now;
             me.yield(); // Allow parent to exit my shred.
         }
+        sendMidi(midiOut, 0xB0, controlIndex, lastValue);
     }
 
-    fun static ControlSequencer create(int sequence[], dur timePerNote, int controlIndex) {
+    fun static ControlSequencer create(int sequence[], dur timePerNote, int controlIndex, int lastValue) {
         ControlSequencer eff;
         sequence @=> eff.sequence;
+        lastValue @=> eff.lastValue;
         timePerNote => eff.timePerNote;
         controlIndex => eff.controlIndex;
+        Std.itoa(controlIndex) => eff.monoGroup;
         return eff;
     }
 }
@@ -128,12 +132,13 @@ class Polly extends Patch {
     "Polly" => name;
     midiDevices.SAMPLE_PAD => inputMidiName;
     10 => instrumentNumber;
+    <<< "CUT!!!", MicroKorg.CUTOFF >>>;
     SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["51"];
     SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["45"];
 
     repeated([78, 96, 114, 126], 2) @=> int SEMITONES[];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE) @=> effectByNote["49"];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE) @=> effectByNote["48"];
+    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["49"];
+    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
 }
 
 class Amazon extends Patch {

@@ -7,3 +7,6 @@ public class MicroKorg {
     15 => static int CONTROL2;
     22 => static int NOISE_LEVEL; 
 }
+
+// Init static properties.
+MicroKorg microKorg;

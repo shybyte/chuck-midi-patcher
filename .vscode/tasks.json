@@ -48,10 +48,16 @@
             }
         },
         {
-            "taskName": "chuck remove all",
-            "isTestCommand": true,
+            "taskName": "chuck remove all shreds",
             "args": [
                 "chuck --remove.all"
+            ]
+        },
+        {
+            "taskName": "chuck remove current shred",
+            "isTestCommand": true,
+            "args": [
+                "chuck --"
             ]
         },
         {

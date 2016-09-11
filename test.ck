@@ -11,7 +11,7 @@ float foo[1];
 <<< foo["yoyo"] >>>;
 
 // access empty element
-<<< foo["gaga"] >>>;  // -> should print 0.0
+//<<< foo["gaga"] >>>;  // -> should print 0.0
 
 
 class Effect {
@@ -70,7 +70,12 @@ fun void print(int in[]) {
 }
 
 
-<<< "Repeated:", repeated([1,2], 3)>>>;
+// <<< "Repeated:", repeated([1,2], 3)>>>;
 
 // print(repeated([1,2,3], 3)
-print(concat([[1,2],[3]]));
+// print(concat([[1,2],[3]]));
+
+<<< "CUT!!!", MicroKorg.CUTOFF >>>;
+
+InitMidiFacade.instance @=> MidiFacade midi;
+<<< "InitMidiFacade.instance", midi.moutCount >>>;
