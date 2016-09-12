@@ -119,12 +119,39 @@ fun int[] concat(int in[][]) {
     return out;
 }
 
+// Abstract class
 class Patch {
     string name;
     string inputMidiName;
     int instrumentNumber;
     Effect effectByNote[1];
-    // Effect e1 @=> effectByNote["60"];
+
+    fun void run() {
+        findMidiOut(OUTPUT_MIDI_NAME) @=> MidiOut midiOut;
+        Shred effectShredByMonoGroup[1];
+
+        while (true) {
+            midi.event => now;
+            midi.event.msg @=> MidiMsg msg;
+            msg.data1 => int data1;
+            msg.data2 => int data2;
+            msg.data3 => int data3;
+
+            if ((midi.event.midiIn.name().find(inputMidiName) > -1) && (data1 == 144 || data1 == 153)) {
+                Std.ftoa(data2, 0) => string note;
+                effectByNote[note] @=> Effect effect;
+                <<< "noteOn: ", midi.event.midiIn.name(), note, effect, data3 >>>;
+                if (effect != null) {
+                    effectShredByMonoGroup[effect.monoGroup] @=> Shred existingShred;  
+                    if (existingShred != null) {
+                        // <<< "Exit Shred", existingShred>>>;
+                        existingShred.exit();
+                    }
+                    spork ~ effect.trigger(midiOut, data3) @=>  effectShredByMonoGroup[effect.monoGroup];;
+                }
+            }
+        }
+    }
 }
 
 class Polly extends Patch {
@@ -188,10 +215,9 @@ Musikant musikant;
 [polly, amazon] @=> Patch patches[];
 polly @=> Patch patch;
 
-Shred effectShredByMonoGroup[1];
-findMidiOut(OUTPUT_MIDI_NAME) @=> MidiOut midiOut;
+<<< "main started" >>>;
 
-<<< "main started">>>;
+spork ~ patch.run() @=> Shred patchShred; 
 
 while (true) {
     midi.event => now;
@@ -199,30 +225,19 @@ while (true) {
     msg.data1 => int data1;
     msg.data2 => int data2;
     msg.data3 => int data3;
-    <<< "hui", midi.event.midiIn.name().find(SAMPLE_PAD), data1, data2, data3 >>>;
-
+    <<< "Midi Event:", midi.event.midiIn.name().find(SAMPLE_PAD), data1, data2, data3 >>>;
     if (midi.event.midiIn.name().find(OUTPUT_MIDI_NAME) >-1 && data1 == 192) {
-        polly @=> patch;
-        <<< "Changed instrument: ", data2>>>;
+        <<< "Changed instrument: ", data2 >>>;
+        if (patchShred != null) {
+            patchShred.exit();
+            null @=> patchShred;
+        }
         for(int patchId; patchId < patches.size(); patchId++) {
             if (patches[patchId].instrumentNumber == data2) {
                 patches[patchId] @=> patch;
+                spork ~ patch.run() @=> patchShred;
                 <<< "Changed patch: ", patch.name>>>;
             }
-        }
-    }
-
-    if ((midi.event.midiIn.name().find(patch.inputMidiName) > -1) && (data1 == 144 || data1 == 153)) {
-        Std.ftoa(data2, 0) => string note;
-        patch.effectByNote[note] @=> Effect effect;
-        <<< "MidiEvent!", midi.event.midiIn.name(), note, effect, data3 >>>;
-        if (effect != null) {
-            effectShredByMonoGroup[effect.monoGroup] @=> Shred existingShred;  
-            if (existingShred != null) {
-                // <<< "Exit Shred", existingShred>>>;
-                existingShred.exit();
-            }
-            spork ~ effect.trigger(midiOut, data3) @=>  effectShredByMonoGroup[effect.monoGroup];;
         }
     }
 }
