@@ -1,0 +1,25 @@
+{
+  "name": "chuck-midi-patcher",
+  "version": "1.0.0",
+  "description": "Control one midi instrument effects with another one. Chuck version.",
+  "main": "script.js",
+  "scripts": {
+    "start": "nodejs ./web/server/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shybyte/chuck-midi-patcher.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shybyte/chuck-midi-patcher/issues"
+  },
+  "homepage": "https://github.com/shybyte/chuck-midi-patcher#readme",
+  "dependencies": {
+    "osc": "2.1.0",
+    "express": "4.13.4",
+    "ws": "1.1.0"
+  }
+}

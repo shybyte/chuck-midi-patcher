@@ -75,7 +75,9 @@ fun void print(int in[]) {
 // print(repeated([1,2,3], 3)
 // print(concat([[1,2],[3]]));
 
-<<< "CUT!!!", MicroKorg.CUTOFF >>>;
+// <<< "CUT!!!", MicroKorg.CUTOFF >>>;
 
-InitMidiFacade.instance @=> MidiFacade midi;
-<<< "InitMidiFacade.instance", midi.moutCount >>>;
+//InitMidiFacade.instance @=> MidiFacade midi;
+// <<< "InitMidiFacade.instance", midi.moutCount >>>;
+
+

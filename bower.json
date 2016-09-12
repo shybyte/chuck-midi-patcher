@@ -1,0 +1,19 @@
+{
+  "name": "chuck-midi-patcher",
+  "homepage": "https://github.com/shybyte/chuck-midi-patcher",
+  "authors": [],
+  "description": "",
+  "main": "",
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "osc.js": "^2.1.0"
+  }
+}
