@@ -139,6 +139,18 @@ class Polly extends Patch {
     ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
 }
 
+class Musikant extends Patch {
+    "Musikant" => name;
+    midiDevices.SAMPLE_PAD => inputMidiName;
+    97 => instrumentNumber;
+    SweepDown.create(MicroKorg.NOISE_LEVEL, 30) @=> effectByNote["51"];
+    SweepDown.create(MicroKorg.NOISE_LEVEL, 30) @=> effectByNote["45"];
+
+    repeated([78, 96, 114, 126], 2) @=> int SEMITONES[];
+    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["49"];
+    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
+}
+
 class Amazon extends Patch {
     "Amazon" => name;
     midiDevices.USB_MIDI_ADAPTER => inputMidiName;
@@ -172,6 +184,7 @@ fun MidiOut findMidiOut(string namePart) {
 
 Polly  polly;
 Amazon amazon;
+Musikant musikant;
 [polly, amazon] @=> Patch patches[];
 polly @=> Patch patch;
 
@@ -189,6 +202,7 @@ while (true) {
     <<< "hui", midi.event.midiIn.name().find(SAMPLE_PAD), data1, data2, data3 >>>;
 
     if (midi.event.midiIn.name().find(OUTPUT_MIDI_NAME) >-1 && data1 == 192) {
+        polly @=> patch;
         <<< "Changed instrument: ", data2>>>;
         for(int patchId; patchId < patches.size(); patchId++) {
             if (patches[patchId].instrumentNumber == data2) {
