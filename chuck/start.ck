@@ -1,3 +1,4 @@
+Machine.add(me.dir() + "/_.ck");  
 Machine.add(me.dir() + "/MidiFacade.ck");  
 Machine.add(me.dir() + "/InitMidiFacade.ck");  
 Machine.add(me.dir() + "/MicroKorg.ck");  
