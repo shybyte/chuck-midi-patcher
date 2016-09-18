@@ -132,6 +132,35 @@ class NoteSequencer extends Effect {
     }
 }
 
+class MidiSequencer extends Effect {
+    "note" => monoGroup;
+    string filename;
+    
+    fun void trigger(MyMidiOut midiOut, float velocity) {
+        MidiFileIn midiFileIn;;
+        MidiMsg msg;
+        midiFileIn.open(filename);
+        while(midiFileIn.read(msg, 0))
+        {
+            if(msg.when > 0::second)
+                msg.when => now;
+            
+            if((msg.data1 & 0xF0) == 0x90 && msg.data2 > 0 && msg.data3 > 0)
+            {
+                midiOut.send(msg.data1, msg.data2, msg.data3);
+            }
+        }
+        
+        midiFileIn.close();
+    }
+
+    fun static MidiSequencer create(string filename) {
+        MidiSequencer eff;
+        filename => eff.filename;
+        return eff;
+    }
+}
+
 // Abstract class
 class Patch {
     string name;
@@ -198,6 +227,16 @@ class Musikant extends Patch {
     ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
 }
 
+class Feinde extends Patch {
+    "Feinde" => name;
+    // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
+    midiDevices.VMPK => inputMidiName;
+    123 => instrumentNumber;
+    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid") @=> effectByNote["45"];
+    NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
+        
+}
+
 class Amazon extends Patch {
     "Amazon" => name;
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
@@ -231,10 +270,11 @@ fun MidiOut findMidiOut(string namePart) {
 
 
 Polly  polly;
+Feinde feinde;
 Amazon amazon;
 Musikant musikant;
-[polly, amazon] @=> Patch patches[];
-amazon @=> Patch patch;
+[polly, amazon, feinde] @=> Patch patches[];
+feinde @=> Patch patch;
 
 <<< "main started" >>>;
 
