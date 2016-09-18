@@ -27,6 +27,39 @@ class FakeMidiOut extends MyMidiOut {
     }
 }
 
+class Sampler extends MyMidiOut {
+    string filenames[128];
+    SndBuf samples[128];
+
+    me.dir() + "../media/samples/drums/kick.wav" @=> filenames[36];
+    me.dir() + "../media/samples/drums/kick.wav" @=> filenames[35];
+    me.dir() + "../media/samples/drums/snare.wav" @=> filenames[38];
+    me.dir() + "../media/samples/drums/hihat.wav" @=> filenames[37];
+
+
+    for(int i; i<filenames.size(); i++) {
+        filenames[i] @=> string filename;
+        if (filename.length()>0) {
+            SndBuf buf => dac;
+            filename => buf.read;
+            buf @=> samples[i];
+            0.0 => buf.gain;
+        }
+    }
+
+    fun void send(MidiMsg msg) {
+        samples[msg.data2] @=> SndBuf buf;
+        <<< "Play drum", now, msg.data2, filenames[msg.data2], buf.length() >>>;
+        0 => buf.pos;
+        1.0 => buf.gain;
+        1.0 => buf.rate;
+    }
+
+}
+
+// Sampler sampler;
+// sampler.send(144, 38, 100);
+
 class NativeMidiOut extends MyMidiOut {
     MidiOut midiOut;
     
@@ -135,28 +168,35 @@ class NoteSequencer extends Effect {
 class MidiSequencer extends Effect {
     "note" => monoGroup;
     string filename;
+    int loop;
     
     fun void trigger(MyMidiOut midiOut, float velocity) {
         MidiFileIn midiFileIn;;
         MidiMsg msg;
         midiFileIn.open(filename);
-        while(midiFileIn.read(msg, 0))
-        {
-            if(msg.when > 0::second)
-                msg.when => now;
-            
-            if((msg.data1 & 0xF0) == 0x90 && msg.data2 > 0 && msg.data3 > 0)
+        do {
+            while(midiFileIn.read(msg, 0))
             {
-                midiOut.send(msg.data1, msg.data2, msg.data3);
+                if(msg.when > 0::second) {
+                    <<< "Wait MidiNote: ", msg.when >>>;
+                    msg.when => now;
+                }
+                
+                if((msg.data1 & 0xF0) == 0x90 && msg.data2 > 0 && msg.data3 > 0) {
+                    // <<< "Play MidiNote: ", msg.data2, msg.data3 >>>;
+                    midiOut.send(msg.data1, msg.data2, msg.data3);
+                }
             }
-        }
+            midiFileIn.rewind();
+        } while (loop);
         
         midiFileIn.close();
     }
 
-    fun static MidiSequencer create(string filename) {
+    fun static MidiSequencer create(string filename, int loop) {
         MidiSequencer eff;
         filename => eff.filename;
+        loop => eff.loop;
         return eff;
     }
 }
@@ -232,7 +272,8 @@ class Feinde extends Patch {
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
     midiDevices.VMPK => inputMidiName;
     123 => instrumentNumber;
-    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid") @=> effectByNote["45"];
+    Sampler sampler @=> myMidiOut;
+    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref2.mid", true) @=> effectByNote["45"];
     NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
         
 }
