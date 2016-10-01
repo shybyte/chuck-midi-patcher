@@ -3,4 +3,5 @@ public class MidiDevices {
     "micro" => string MICRO_KEY;
     "SamplePad" => string SAMPLE_PAD;
     "VMPK" => string VMPK;
+    "12Step" => string STEP12;
 }
