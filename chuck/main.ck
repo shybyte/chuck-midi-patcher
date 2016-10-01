@@ -214,6 +214,7 @@ class MidiSequencer extends Effect {
     int loop;
     MyMidiOut myMidiOut;
     dur offset;
+    float bpm;
     
     fun void trigger(MyMidiOut _midiOut, float velocity) {
         <<< "triggermidi">>>;
@@ -229,7 +230,7 @@ class MidiSequencer extends Effect {
             {
                 if(msg.when > 0::second) {
                     // <<< "Wait MidiNote: ", msg.when >>>;
-                    msg.when*120.0/140.0 => now;
+                    msg.when*120.0/bpm => now;
                     me.yield(); // Allow stop to exit my shred.
                 }
 
@@ -261,12 +262,13 @@ class MidiSequencer extends Effect {
         }
     }
 
-    fun static MidiSequencer create(string filename, MyMidiOut midiOut, int loop, dur offset) {
+    fun static MidiSequencer create(string filename, MyMidiOut midiOut, int loop, dur offset, float bpm) {
         MidiSequencer eff;
         filename => eff.filename;
         loop => eff.loop;
         midiOut @=> eff.myMidiOut;
         offset => eff.offset; 
+        bpm => eff.bpm;
         return eff;
     }
 }
@@ -350,7 +352,7 @@ class Patch {
             }
 
             if (midi.event.midiIn.name().find(inputControlName) > -1 && data1 == 176) {
-                <<< "inputControl: ", midi.event.midiIn.name(), data1, data2, data3 >>>;
+                <<< "inputControl: ", midi.event.midiIn.name(), data1, data2, data3, controlIndex, midiOut >>>;
                 midiOut.send(data1, controlIndex, data3);
             }
         }
@@ -386,9 +388,20 @@ class Feinde extends Patch {
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
     midiDevices.VMPK => inputMidiName;
     123 => instrumentNumber;
-    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true, 0::ms) @=> effectByNote["45"];
+    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true, 0::ms, 130.0) @=> effectByNote["45"];
     NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
-        
+}
+
+class Messenger extends Patch {
+    "Messenger" => name;
+    // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
+    midiDevices.STEP12 => inputMidiName;
+    96 => instrumentNumber;
+    1 => controlIndex;
+    MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130) @=> effectByNote["50"];
+    NoteSequencer.create() @=> effectByNote["52"];
+    null => myMidiOut;
+    
 }
 
 class Amazon extends Patch {
@@ -411,8 +424,8 @@ class Amazon extends Patch {
 
     NoteSequencer.create(AMAZON_SEQ, timePerNote) @=> Effect seqEff;
 
-    MidiSequencer.create(me.sourceDir() + "../media/amazon/drums.mid", sampler, true, 0::ms) @=> Effect drums;
-    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass-short.mid", null, true, 20::ms) @=> Effect bass;
+    MidiSequencer.create(me.sourceDir() + "../media/amazon/drums.mid", sampler, true, 0::ms, 140) @=> Effect drums;
+    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass-short.mid", null, true, 20::ms, 140) @=> Effect bass;
     // MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", moogMidiOut, true) @=> Effect bass;
     MultipleEffects.create([bass, drums]) @=> Effect ref;
 
@@ -437,12 +450,16 @@ Polly  polly;
 Feinde feinde;
 Amazon amazon;
 Musikant musikant;
-[polly, amazon, feinde] @=> Patch patches[];
-amazon @=> Patch patch;
+Messenger messenger;
+[polly, amazon, feinde, messenger] @=> Patch patches[];
+messenger @=> Patch patch;
 
 <<< "main started" >>>;
 
 spork ~ patch.run() @=> Shred patchShred; 
+
+// NativeMidiOut.create(findMidiOut(OUTPUT_MIDI_NAME)) @=> MyMidiOut midiOut;
+// midiOut.send(176, 1, 10);
 
 while (true) {
     midi.event => now;
