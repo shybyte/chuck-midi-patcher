@@ -74,7 +74,7 @@ class Sampler extends MyMidiOut {
             return;
         }
         samples[msg.data2] @=> SndBuf buf;
-        <<< "Play drum", now, msg.data2, filenames[msg.data2], buf.length() >>>;
+        // <<< "Play drum", now, msg.data2, filenames[msg.data2], buf.length() >>>;
         0 => buf.pos;
         1.0 => buf.gain;
         1.0 => buf.rate;
@@ -89,6 +89,7 @@ class NativeMidiOut extends MyMidiOut {
     MidiOut midiOut;
     
     fun void send(MidiMsg msg) {
+        <<< "Native: ", msg.data1, msg.data2, msg.data3 >>>;
         midiOut.send(msg);
     }
 
@@ -200,6 +201,11 @@ class NoteSequencer extends Effect {
         timePerNote => eff.timePerNote;
         return eff;
     }
+
+    fun static NoteSequencer create() {
+        NoteSequencer eff;
+        return eff;
+    }
 }
 
 class MidiSequencer extends Effect {
@@ -207,6 +213,7 @@ class MidiSequencer extends Effect {
     string filename;
     int loop;
     MyMidiOut myMidiOut;
+    dur offset;
     
     fun void trigger(MyMidiOut _midiOut, float velocity) {
         <<< "triggermidi">>>;
@@ -216,16 +223,19 @@ class MidiSequencer extends Effect {
         MidiFileIn midiFileIn;
         MidiMsg msg;
         midiFileIn.open(filename);
+        offset => now;
         do {
             while(midiFileIn.read(msg, 0))
             {
                 if(msg.when > 0::second) {
                     // <<< "Wait MidiNote: ", msg.when >>>;
-                    msg.when => now;
+                    msg.when*120.0/140.0 => now;
                     me.yield(); // Allow stop to exit my shred.
                 }
-                
-                if((msg.data1 & 0xF0) == 0x90 && msg.data2 > 0 && msg.data3 > 0) {
+
+                (msg.data1 & 0xF0) => int midiCommand;
+
+                if((midiCommand == 144 || midiCommand == 128) && msg.data2 > 0) {
                     // <<< "Play MidiNote: ", msg.data2, msg.data3 >>>;
                     myMidiOut.send(msg.data1, msg.data2, msg.data3);
                 }
@@ -245,15 +255,18 @@ class MidiSequencer extends Effect {
 
     fun void stopAllNotes() {
         for (int i; i < 128; i++) {
-            myMidiOut.send(128, i, 0);
+            for (int i2;  i2 < 4; i2++) {
+                myMidiOut.send(128, i, 0);
+            }
         }
     }
 
-    fun static MidiSequencer create(string filename, MyMidiOut midiOut, int loop) {
+    fun static MidiSequencer create(string filename, MyMidiOut midiOut, int loop, dur offset) {
         MidiSequencer eff;
         filename => eff.filename;
         loop => eff.loop;
-        midiOut @=> eff.myMidiOut; 
+        midiOut @=> eff.myMidiOut;
+        offset => eff.offset; 
         return eff;
     }
 }
@@ -373,14 +386,15 @@ class Feinde extends Patch {
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
     midiDevices.VMPK => inputMidiName;
     123 => instrumentNumber;
-    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true) @=> effectByNote["45"];
+    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true, 0::ms) @=> effectByNote["45"];
     NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
         
 }
 
 class Amazon extends Patch {
     "Amazon" => name;
-    midiDevices.MICRO_KEY => inputMidiName;
+    // midiDevices.MICRO_KEY => inputMidiName;
+    midiDevices.USB_MIDI_ADAPTER => inputMidiName;
     // midiDevices.VMPK => inputMidiName;
     42 => instrumentNumber;
 
@@ -397,14 +411,14 @@ class Amazon extends Patch {
 
     NoteSequencer.create(AMAZON_SEQ, timePerNote) @=> Effect seqEff;
 
-    MidiSequencer.create(me.sourceDir() + "../media/amazon/drums.mid", sampler, true) @=> Effect drums;
-    //MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", null, true) @=> Effect bass;
-    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", moogMidiOut, true) @=> Effect bass;
+    MidiSequencer.create(me.sourceDir() + "../media/amazon/drums.mid", sampler, true, 0::ms) @=> Effect drums;
+    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass-short.mid", null, true, 20::ms) @=> Effect bass;
+    // MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", moogMidiOut, true) @=> Effect bass;
     MultipleEffects.create([bass, drums]) @=> Effect ref;
 
     ref @=> effectByNote["45"];
     drums @=> effectByNote["46"];
-    NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
+    NoteSequencer.create() @=> effectByNote["52"];
     NoteSequencer.create(AMAZON_SEQ_RAND, timePerNote) @=> effectByNote["36"];
     null => myMidiOut;
 }
