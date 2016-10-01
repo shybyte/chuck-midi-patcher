@@ -22,10 +22,32 @@ class FakeMidiOut extends MyMidiOut {
     Mandolin s => dac;
     
     fun void send(MidiMsg msg) {
-        msg.data2 => Std.mtof => s.freq;
-        msg.data3/127.0 => s.noteOn;
+         if (msg.data1 == 144) {
+            msg.data2 => Std.mtof => s.freq;
+            msg.data3/127.0 => s.noteOn;
+        } else if (msg.data1 == 128) {
+            msg.data3/127.0 => s.noteOff;
+        }
     }
 }
+
+FakeMidiOut mandolinMidiOut;
+
+
+class MoogMidiOut extends MyMidiOut {
+    Moog s => dac;
+    
+    fun void send(MidiMsg msg) {
+        if (msg.data1 == 144) {
+            msg.data2 => Std.mtof => s.freq;
+            msg.data3/127.0 => s.noteOn;
+        } else if (msg.data1 == 128) {
+            msg.data3/127.0 => s.noteOff;
+        }
+    }
+}
+
+MoogMidiOut moogMidiOut;
 
 class Sampler extends MyMidiOut {
     string filenames[128];
@@ -48,6 +70,9 @@ class Sampler extends MyMidiOut {
     }
 
     fun void send(MidiMsg msg) {
+        if (msg.data1 != 144) {
+            return;
+        }
         samples[msg.data2] @=> SndBuf buf;
         <<< "Play drum", now, msg.data2, filenames[msg.data2], buf.length() >>>;
         0 => buf.pos;
@@ -82,7 +107,19 @@ class NativeMidiOut extends MyMidiOut {
 
 class Effect {
     "dummy" => string monoGroup;
+    Shred shred;
+
+    fun void start(MyMidiOut midiOut, float velocity) {
+        spork ~ trigger(midiOut, velocity) @=> shred;
+    }
+    
     fun void trigger(MyMidiOut midiOut, float velocity) {
+    
+    }
+    
+    fun void stop() {
+        <<< "Stopping Effect">>>;
+        shred.exit();
     }
 }
 
@@ -172,6 +209,7 @@ class MidiSequencer extends Effect {
     MyMidiOut myMidiOut;
     
     fun void trigger(MyMidiOut _midiOut, float velocity) {
+        <<< "triggermidi">>>;
         if (myMidiOut == null) {
             _midiOut @=> myMidiOut;
         }
@@ -182,19 +220,33 @@ class MidiSequencer extends Effect {
             while(midiFileIn.read(msg, 0))
             {
                 if(msg.when > 0::second) {
-                    <<< "Wait MidiNote: ", msg.when >>>;
+                    // <<< "Wait MidiNote: ", msg.when >>>;
                     msg.when => now;
+                    me.yield(); // Allow stop to exit my shred.
                 }
                 
                 if((msg.data1 & 0xF0) == 0x90 && msg.data2 > 0 && msg.data3 > 0) {
-                    <<< "Play MidiNote: ", msg.data2, msg.data3 >>>;
+                    // <<< "Play MidiNote: ", msg.data2, msg.data3 >>>;
                     myMidiOut.send(msg.data1, msg.data2, msg.data3);
                 }
             }
             midiFileIn.rewind();
         } while (loop);
         
+        stopAllNotes();
         midiFileIn.close();
+    }
+
+    fun void stop() {
+        <<< " Stopping MidiSequencer ">>>;
+        stopAllNotes();
+        shred.exit();
+    }
+
+    fun void stopAllNotes() {
+        for (int i; i < 128; i++) {
+            myMidiOut.send(128, i, 0);
+        }
     }
 
     fun static MidiSequencer create(string filename, MyMidiOut midiOut, int loop) {
@@ -213,18 +265,29 @@ class MultipleEffects extends Effect {
     fun void trigger(MyMidiOut midiOut, float velocity) {
         <<<  "Trigger MultipleEffects:", effects.size() >>>;
         for (int i; i < effects.size(); i++) {
-            spork ~ effects[i].trigger(midiOut, velocity);
+            effects[i].start(midiOut, velocity);
         }
         while (true) {
             0.1::second => now; 
         }
     }
 
+    fun void stop() {
+        <<< " Stopping children ">>>;
+        for (int i; i < effects.size(); i++) {
+            effects[i].stop();
+        }
+        shred.exit();
+    }
+
+
     fun static MultipleEffects create(Effect effects[]) {
         MultipleEffects eff;
         effects @=> eff.effects;
         return eff;
     }
+
+
 }
 
 
@@ -242,11 +305,14 @@ class Patch {
         MyMidiOut midiOut;
         if (myMidiOut == null) {
             NativeMidiOut.create(findMidiOut(OUTPUT_MIDI_NAME)) @=> midiOut;
+            if (midiOut == null) {
+                mandolinMidiOut @=> midiOut;
+            }
         } else {
             myMidiOut @=> midiOut;
         }
 
-        Shred effectShredByMonoGroup[1];
+        Effect @ effectByMonoGroup[1];
 
         while (true) {
             midi.event => now;
@@ -260,12 +326,13 @@ class Patch {
                 effectByNote[note] @=> Effect effect;
                 <<< "noteOn: ", midi.event.midiIn.name(), note, effect, data3 >>>;
                 if (effect != null) {
-                    effectShredByMonoGroup[effect.monoGroup] @=> Shred existingShred;  
-                    if (existingShred != null) {
-                        // <<< "Exit Shred", existingShred>>>;
-                        existingShred.exit();
+                    effectByMonoGroup[effect.monoGroup] @=> Effect playingEffect;  
+                    if (playingEffect != null) {
+                        <<< "Stop Effect", playingEffect >>>;
+                        playingEffect.stop();
                     }
-                    spork ~ effect.trigger(midiOut, data3) @=>  effectShredByMonoGroup[effect.monoGroup];;
+                    effect @=> effectByMonoGroup[effect.monoGroup];;
+                    effect.start(midiOut, data3);
                 }
             }
 
@@ -313,7 +380,7 @@ class Feinde extends Patch {
 
 class Amazon extends Patch {
     "Amazon" => name;
-    midiDevices.USB_MIDI_ADAPTER => inputMidiName;
+    midiDevices.MICRO_KEY => inputMidiName;
     // midiDevices.VMPK => inputMidiName;
     42 => instrumentNumber;
 
@@ -329,8 +396,10 @@ class Amazon extends Patch {
     (60.0 / 150.0 * 1000.0 / 2.0)::ms => dur timePerNote;
 
     NoteSequencer.create(AMAZON_SEQ, timePerNote) @=> Effect seqEff;
+
     MidiSequencer.create(me.sourceDir() + "../media/amazon/drums.mid", sampler, true) @=> Effect drums;
-    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", null, true) @=> Effect bass;
+    //MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", null, true) @=> Effect bass;
+    MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", moogMidiOut, true) @=> Effect bass;
     MultipleEffects.create([bass, drums]) @=> Effect ref;
 
     ref @=> effectByNote["45"];
