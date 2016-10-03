@@ -3,6 +3,8 @@ MidiDevices midiDevices;
 
 midiDevices.USB_MIDI_ADAPTER => string OUTPUT_MIDI_NAME;
 midiDevices.SAMPLE_PAD => string SAMPLE_PAD;
+midiDevices.VMPK => string KEYBOARD_INPUT;
+
 
 class MyMidiOut {
     fun void send(MidiMsg msg) {
@@ -89,7 +91,7 @@ class NativeMidiOut extends MyMidiOut {
     MidiOut midiOut;
     
     fun void send(MidiMsg msg) {
-        <<< "Native: ", msg.data1, msg.data2, msg.data3 >>>;
+        // <<< "Native: ", msg.data1, msg.data2, msg.data3 >>>;
         midiOut.send(msg);
     }
 
@@ -104,6 +106,7 @@ class NativeMidiOut extends MyMidiOut {
 
 }
 
+NativeMidiOut.create(findMidiOut(midiDevices.STEP12)) @=> MyMidiOut displayOut;
 
 
 class Effect {
@@ -199,11 +202,6 @@ class NoteSequencer extends Effect {
         NoteSequencer eff;
         sequence @=> eff.sequence;
         timePerNote => eff.timePerNote;
-        return eff;
-    }
-
-    fun static NoteSequencer create() {
-        NoteSequencer eff;
         return eff;
     }
 }
@@ -305,18 +303,71 @@ class MultipleEffects extends Effect {
 
 }
 
+class NoEffect extends Effect {
+    "note" => monoGroup;
+
+    fun static NoEffect create() {
+        NoEffect eff;
+        return eff;
+    }
+}
+
+
+class EffectTrigger {
+    int note;
+    Effect effect;
+    -1 => int primerNote;
+
+    fun static EffectTrigger find(EffectTrigger effectTriggers[], int note, int primerNote) {
+        for (int i; i < effectTriggers.size(); i++) {
+            effectTriggers[i] @=> EffectTrigger et;
+            if (note == et.note && (primerNote == et.primerNote || et.primerNote < 0))  {
+                return et;
+            }
+        }
+    } 
+
+    fun static EffectTrigger create(int note, int primerNote , Effect effect) {
+        EffectTrigger et;
+        note => et.note;
+        primerNote @=> et.primerNote;
+        effect @=> et.effect;
+        return et;
+    }
+}
+
+fun void clearDisplay() {
+    if (displayOut == null) {
+        return;
+    }
+    for (int i; i < 12; i++) {
+        displayOut.send(176, 20 + i, 0);
+    }
+}
 
 // Abstract class
 class Patch {
     string name;
     string inputMidiName;
+    string primerMidiName;
     midiDevices.STEP12 => string inputControlName;
     74 => int controlIndex;
     int instrumentNumber;
-    Effect effectByNote[1];
-    FakeMidiOut mandolin @=> MyMidiOut myMidiOut;
+    EffectTrigger effectTriggers[0];
+    FakeMidiOut midiOut @=> MyMidiOut myMidiOut;
+
+    fun void addEff(int note, Effect eff) {
+        addEff(note, -1 , eff);
+    }
+
+    fun void addEff(int note, int primerNote, Effect eff) {
+        effectTriggers.size() => int i;
+        effectTriggers.size(i + 1);
+        EffectTrigger.create(note, primerNote, eff) @=> effectTriggers[i];
+    }
 
     fun void run() {
+        -1 => int primerNote;
         MyMidiOut midiOut;
         if (myMidiOut == null) {
             NativeMidiOut.create(findMidiOut(OUTPUT_MIDI_NAME)) @=> midiOut;
@@ -336,11 +387,30 @@ class Patch {
             msg.data2 => int data2;
             msg.data3 => int data3;
 
-            if ((midi.event.midiIn.name().find(inputMidiName) > -1) && (data1 == 144 || data1 == 153)) {
-                Std.ftoa(data2, 0) => string note;
-                effectByNote[note] @=> Effect effect;
-                <<< "noteOn: ", midi.event.midiIn.name(), note, effect, data3 >>>;
-                if (effect != null) {
+            midi.event.midiIn.name() => string midiInName;
+
+            if ((midiInName.find(primerMidiName) > -1) && (data1 == 144 || data1==128)) {
+                data2 => primerNote;
+                <<< "Set primerNote", primerNote>>>;
+                if (displayOut != null) {
+                    clearDisplay();
+                    displayOut.send(176, primerNote-48+20, 1);
+                }
+            }
+
+            if (((midiInName.find(inputMidiName) > -1) || (midiInName.find(primerMidiName) > -1)) && (data1 == 144 || data1 == 153)) {
+                data2 => int note;
+                if (midiInName.find(primerMidiName) >-1) {
+                    -1 => note;
+                }
+                EffectTrigger.find(effectTriggers, note, primerNote) @=> EffectTrigger effectTrigger;
+                <<< "noteOn: ", midiInName, note, primerNote, effectTrigger, data3 >>>;
+                if (effectTrigger != null) {
+                    if (effectTrigger.primerNote != -1) {
+                        clearDisplay();
+                        -1 => primerNote;
+                    }
+                    effectTrigger.effect @=> Effect effect;
                     effectByMonoGroup[effect.monoGroup] @=> Effect playingEffect;  
                     if (playingEffect != null) {
                         <<< "Stop Effect", playingEffect >>>;
@@ -351,36 +421,39 @@ class Patch {
                 }
             }
 
-            if (midi.event.midiIn.name().find(inputControlName) > -1 && data1 == 176) {
-                <<< "inputControl: ", midi.event.midiIn.name(), data1, data2, data3, controlIndex, midiOut >>>;
+            if (midiInName.find(inputControlName) > -1 && data1 == 176) {
+                <<< "inputControl: ", midiInName, data1, data2, data3, controlIndex, midiOut >>>;
                 midiOut.send(data1, controlIndex, data3);
             }
         }
     }
 }
 
+
 class Polly extends Patch {
     "Polly" => name;
     midiDevices.SAMPLE_PAD => inputMidiName;
     10 => instrumentNumber;
-    SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["51"];
-    SweepDown.create(MicroKorg.CUTOFF, 30) @=> effectByNote["45"];
+    
+    addEff(45, SweepDown.create(MicroKorg.CUTOFF, 30));
+    addEff(51, SweepDown.create(MicroKorg.CUTOFF, 30));
 
     _.repeated([78, 96, 114, 126], 2) @=> int SEMITONES[];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["49"];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
+    addEff(48, ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64));
+    addEff(49, ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64));
 }
 
 class Musikant extends Patch {
     "Musikant" => name;
     midiDevices.SAMPLE_PAD => inputMidiName;
     97 => instrumentNumber;
-    SweepDown.create(MicroKorg.NOISE_LEVEL, 30) @=> effectByNote["51"];
-    SweepDown.create(MicroKorg.NOISE_LEVEL, 30) @=> effectByNote["45"];
+    addEff(45, SweepDown.create(MicroKorg.NOISE_LEVEL, 30));
+    addEff(51, SweepDown.create(MicroKorg.NOISE_LEVEL, 30));
+    
 
     _.repeated([78, 96, 114, 126], 2) @=> int SEMITONES[];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["49"];
-    ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64) @=> effectByNote["48"];
+    addEff(48, ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64));
+    addEff(49, ControlSequencer.create(SEMITONES, 30::ms, MicroKorg.OSC2_SEMITONE, 64));
 }
 
 class Feinde extends Patch {
@@ -388,20 +461,22 @@ class Feinde extends Patch {
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
     midiDevices.VMPK => inputMidiName;
     123 => instrumentNumber;
-    MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true, 0::ms, 130.0) @=> effectByNote["45"];
-    NoteSequencer.create([45], 1::second) @=> effectByNote["57"];
+    addEff(45, MidiSequencer.create(me.sourceDir() + "../media/feinde/drums-ref.mid", sampler, true, 0::ms, 130.0));
+    addEff(57, NoEffect.create());
 }
 
 class Messenger extends Patch {
     "Messenger" => name;
     // midiDevices.USB_MIDI_ADAPTER => inputMidiName;
-    midiDevices.STEP12 => inputMidiName;
+    KEYBOARD_INPUT => inputMidiName;
+    midiDevices.STEP12 => primerMidiName;
     96 => instrumentNumber;
     1 => controlIndex;
-    MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130) @=> effectByNote["50"];
-    NoteSequencer.create() @=> effectByNote["52"];
-    null => myMidiOut;
-    
+    // addEff(50, MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130));
+    // addEff(45, 50, MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130));
+    addEff(45, 50, MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130));
+    // addEff(-1, 53, MidiSequencer.create(me.sourceDir() + "../media/messenger/drums2.mid", sampler, true, 0::ms, 130));
+    addEff(-1, 52, NoEffect.create());
 }
 
 class Amazon extends Patch {
@@ -429,11 +504,10 @@ class Amazon extends Patch {
     // MidiSequencer.create(me.sourceDir() + "../media/amazon/bass.mid", moogMidiOut, true) @=> Effect bass;
     MultipleEffects.create([bass, drums]) @=> Effect ref;
 
-    ref @=> effectByNote["45"];
-    drums @=> effectByNote["46"];
-    NoteSequencer.create() @=> effectByNote["52"];
-    NoteSequencer.create(AMAZON_SEQ_RAND, timePerNote) @=> effectByNote["36"];
-    null => myMidiOut;
+    addEff(36, NoteSequencer.create(AMAZON_SEQ_RAND, timePerNote));
+    addEff(45, ref);
+    addEff(46, drums);
+    addEff(52, NoEffect.create());
 }
 
 
@@ -444,7 +518,6 @@ fun MidiOut findMidiOut(string namePart) {
         }
     }
 }
-
 
 Polly  polly;
 Feinde feinde;
@@ -461,6 +534,18 @@ spork ~ patch.run() @=> Shred patchShred;
 // NativeMidiOut.create(findMidiOut(OUTPUT_MIDI_NAME)) @=> MyMidiOut midiOut;
 // midiOut.send(176, 1, 10);
 
+fun void displayPatchName(string text) {
+    if (displayOut != null) {
+        text.upper() @=> string patchName;
+        for (int i; i < patchName.length() && i<4; i++) {
+            displayOut.send(176, 50 + i, patchName.charAt(i));
+        }
+    }
+}
+
+displayPatchName(patch.name);
+clearDisplay();
+
 while (true) {
     midi.event => now;
     midi.event.msg @=> MidiMsg msg;
@@ -474,12 +559,18 @@ while (true) {
             patchShred.exit();
             null @=> patchShred;
         }
+        clearDisplay();
         for(int patchId; patchId < patches.size(); patchId++) {
             if (patches[patchId].instrumentNumber == data2) {
                 patches[patchId] @=> patch;
                 spork ~ patch.run() @=> patchShred;
                 <<< "Changed patch: ", patch.name>>>;
+                displayPatchName(patch.name);
             }
+        }
+
+        if (patchShred == null) {
+            displayPatchName("----");
         }
     }
 }
